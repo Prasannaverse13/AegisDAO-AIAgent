@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount, useBalance } from 'wagmi';
 import WalletConnector from './WalletConnector';
 import TreasuryOverview from './TreasuryOverview';
@@ -17,11 +17,18 @@ const AegisDashboard = () => {
     address,
   });
 
-  const [currentProposal] = useState({
-    action: 'Rebalance',
-    proposal: 'Sell 0.002 ETH to buy USDC.',
-    justification: "The proposed rebalancing aligns the DAO's portfolio with its risk tolerance policy, which specifies a low volatility target and a preferred asset class of stablecoins. Converting the current ETH balance to USDC mitigates market volatility risk and moves the portfolio towards the target stablecoin allocation."
-  });
+type RiskPolicy = { maxDrawdown: number; volatilityTarget: string; stablecoinAllocation: number; preferredAssetClass: string };
+const [riskPolicy, setRiskPolicy] = useState<RiskPolicy>({
+  maxDrawdown: 10,
+  volatilityTarget: 'Low',
+  stablecoinAllocation: 60,
+  preferredAssetClass: 'Stablecoins',
+});
+const [currentProposal, setCurrentProposal] = useState({
+  action: 'Analyzing',
+  proposal: 'Generating proposal based on current market data...',
+  justification: 'Please wait while the AI agent computes an optimal strategy.',
+});
 
   const handleApproveProposal = () => {
     toast({
@@ -38,40 +45,21 @@ const AegisDashboard = () => {
     });
   };
 
-  const handlePolicyUpdate = async (policy: string) => {
+const handlePolicyUpdate = async (policy: string) => {
     console.log('Updating policy:', policy);
-    
     if (!policy.trim()) {
-      toast({
-        title: "Invalid Policy",
-        description: "Please enter a risk policy statement",
-        variant: "destructive",
-      });
-      return;
+      toast({ title: 'Invalid Policy', description: 'Please enter a risk policy statement', variant: 'destructive' });
+      return Promise.reject(new Error('Invalid policy'));
     }
-
-    toast({
-      title: "Processing Risk Policy...",
-      description: "AI is analyzing your policy with Gemini API",
-    });
-
+    toast({ title: 'Processing Risk Policy...', description: 'AI is analyzing your policy with Gemini API' });
     try {
-      // Simulate AI processing the natural language policy
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Show success with updated parameters
-      toast({
-        title: "Risk Policy Updated Successfully",
-        description: "AI parameters have been recalculated and applied to the system",
-      });
-      
-      // Optional: You could also update the displayed parameters here
+      const interpreted = await aegisAgent.interpretRiskPolicy(policy);
+      setRiskPolicy(interpreted);
+      toast({ title: 'Risk Policy Updated', description: 'AI parameters recalculated and applied' });
+      return interpreted;
     } catch (error) {
-      toast({
-        title: "Policy Update Failed",
-        description: "Unable to process policy. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: 'Policy Update Failed', description: 'Unable to process policy. Please try again.', variant: 'destructive' });
+      return Promise.reject(error);
     }
   };
 
@@ -83,20 +71,13 @@ const AegisDashboard = () => {
     });
 
     try {
-      // Get current portfolio state
+// Get current portfolio state
       const currentPortfolio = {
         assets: { ETH: balance ? parseFloat(balance.formatted) : 0, USDC: 0 },
         totalValue: balance ? parseFloat(balance.formatted) * 2400 : 0
       };
 
-      const riskPolicy = {
-        maxDrawdown: 10,
-        volatilityTarget: 'Low',
-        stablecoinAllocation: 60,
-        preferredAssetClass: 'Stablecoins'
-      };
-
-      // Call the AI analysis
+// Call the AI analysis
       const analysis = await aegisAgent.analyzeHypotheticalTrade(
         currentPortfolio,
         query,
@@ -131,42 +112,57 @@ const AegisDashboard = () => {
     return `$${value.toFixed(2)}`;
   };
 
-  const formatAddress = (addr: string) => {
+const formatAddress = (addr: string) => {
     if (!addr) return '';
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
+
+  useEffect(() => {
+    // Auto-generate a live proposal when connected or policy/portfolio changes
+    if (!isConnected) return;
+    const run = async () => {
+      const currentPortfolio = {
+        assets: { ETH: balance ? parseFloat(balance.formatted) : 0, USDC: 0 },
+        totalValue: balance ? parseFloat(balance.formatted) * 2400 : 0
+      };
+      const marketData = { prices: { ETH: 2400, USDC: 1 }, sentiment: 'Neutral', volatility: 0.2 };
+      try {
+        const proposal = await aegisAgent.generateRebalancingProposal(currentPortfolio, marketData, riskPolicy);
+        setCurrentProposal({
+          action: proposal.action,
+          proposal: `Sell ${proposal.amount} ${proposal.assetOut} to buy ${proposal.assetIn}.`,
+          justification: proposal.justification,
+        });
+      } catch (e) {
+        // keep defaults on error
+      }
+    };
+    run();
+  }, [isConnected, balance, riskPolicy]);
 
   if (!isConnected) {
     return (
       <div className="min-h-screen relative overflow-hidden">
         {/* Animated Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-muted/20">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.1),transparent_50%)]"></div>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,hsl(var(--secondary)/0.05),transparent_50%)]"></div>
-          <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-secondary/5 rounded-full blur-3xl animate-pulse delay-1000"></div>
+<div className="absolute inset-0 bg-gradient-to-br from-background via-background to-muted/20">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(var(--primary)/0.12),transparent_55%)]"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,hsl(var(--secondary)/0.08),transparent_55%)]"></div>
+          <div className="absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)]; [background-size:40px_40px]; opacity-30"></div>
+          <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-primary/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-secondary/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
         </div>
         
         {/* Content */}
         <div className="relative z-10 flex items-center justify-center min-h-screen p-6">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="mb-12">
-              <h1 className="text-6xl font-bold text-gradient-primary mb-6 float-animation">
-                Aegis DAO
-              </h1>
-              <p className="text-2xl text-foreground mb-4">
-                Autonomous AI Agent for DAO Treasury Management
-              </p>
+<div className="mb-12">
+              <h1 className="text-6xl font-bold text-gradient-primary mb-3 float-animation">Aegis DAO</h1>
+              <p className="text-2xl text-foreground mb-2">Autonomous AI Agent for DAO Treasury Management</p>
+              <p className="text-base text-muted-foreground mb-6">AegisDAO • Connect your wallet to manage treasury</p>
               <p className="text-lg text-muted-foreground flex items-center justify-center gap-4">
-                <span className="flex items-center gap-2">
-                  🔒 Privacy-preserving
-                </span>
-                <span className="flex items-center gap-2">
-                  🤖 Multi-agent
-                </span>
-                <span className="flex items-center gap-2">
-                  ⚡ ZK-powered
-                </span>
+                <span className="flex items-center gap-2">🔒 Privacy-preserving</span>
+                <span className="flex items-center gap-2">🤖 Multi-agent</span>
+                <span className="flex items-center gap-2">⚡ ZK-powered</span>
               </p>
             </div>
             <div className="flex justify-center">
@@ -207,7 +203,7 @@ const AegisDashboard = () => {
 
           {/* Center Column - AI Proposal & Chat */}
           <div className="space-y-6">
-            <AIRebalancingProposal
+<AIRebalancingProposal
               action={currentProposal.action}
               proposal={currentProposal.proposal}
               justification={currentProposal.justification}

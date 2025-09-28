@@ -5,8 +5,20 @@ import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Settings, Brain, CheckCircle } from 'lucide-react';
 
+interface RiskPolicyParameters {
+  maxDrawdown: string;
+  volatilityTarget: string;
+  stablecoinAllocation: string;
+  preferredAssetClass: string;
+}
+
 interface RiskPolicyManagerProps {
-  onPolicyUpdate: (policy: string) => void;
+  onPolicyUpdate: (policy: string) => Promise<{
+    maxDrawdown: number;
+    volatilityTarget: string;
+    stablecoinAllocation: number;
+    preferredAssetClass: string;
+  }>;
 }
 
 const RiskPolicyManager = ({ onPolicyUpdate }: RiskPolicyManagerProps) => {
@@ -17,12 +29,13 @@ const RiskPolicyManager = ({ onPolicyUpdate }: RiskPolicyManagerProps) => {
     '"Aggressively pursue high-growth, emerging tokens and accept a 25% drawdown."'
   ];
 
-  const currentParameters = {
-    maxDrawdown: '10%',
-    volatilityTarget: 'Low',
-    stablecoinAllocation: '60%',
-    preferredAssetClass: 'Stablecoins'
-  };
+const [currentParameters, setCurrentParameters] = useState<RiskPolicyParameters>({
+  maxDrawdown: '10%',
+  volatilityTarget: 'Low',
+  stablecoinAllocation: '60%',
+  preferredAssetClass: 'Stablecoins'
+});
+const [isUpdating, setIsUpdating] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -62,13 +75,27 @@ const RiskPolicyManager = ({ onPolicyUpdate }: RiskPolicyManagerProps) => {
             </div>
           </div>
           
-          <Button 
-            onClick={() => onPolicyUpdate(policyStatement)}
+<Button 
+            onClick={async () => {
+              if (!policyStatement.trim()) return;
+              try {
+                setIsUpdating(true);
+                const res = await onPolicyUpdate(policyStatement);
+                setCurrentParameters({
+                  maxDrawdown: `${res.maxDrawdown}%`,
+                  volatilityTarget: res.volatilityTarget,
+                  stablecoinAllocation: `${res.stablecoinAllocation}%`,
+                  preferredAssetClass: res.preferredAssetClass,
+                });
+              } finally {
+                setIsUpdating(false);
+              }
+            }}
             className="w-full glow-primary"
-            disabled={!policyStatement.trim()}
+            disabled={!policyStatement.trim() || isUpdating}
           >
             <Settings className="h-4 w-4 mr-2" />
-            Update AI Policy
+            {isUpdating ? 'Updating...' : 'Update AI Policy'}
           </Button>
         </CardContent>
       </Card>

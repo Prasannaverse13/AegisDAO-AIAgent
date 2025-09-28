@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Activity, Users, MessageSquare, AlertTriangle, Play, Zap } from 'lucide-react';
+import { subscribeAgentEvents } from '@/services/agentBus';
 
 interface Agent {
   id: string;
@@ -48,7 +49,25 @@ const AgentMonitor = () => {
     }
   ]);
   
-  const [isRunning, setIsRunning] = useState(false);
+const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAgentEvents((evt) => {
+      // Append live event as a communication line
+      setCommunications(prev => [{
+        id: `${evt.timestamp}`,
+        from: 'aegis-main',
+        to: evt.type.includes('policy') ? 'risk-analyzer' : evt.type.includes('rebalance') ? 'market-monitor' : 'system',
+        type: evt.type.includes('error') ? 'alert' : evt.type.includes('proposal') ? 'proposal' : 'analysis',
+        message: evt.message,
+        timestamp: new Date(evt.timestamp)
+      }, ...prev]);
+
+      // Poke agents to show activity
+      setAgents(prev => prev.map(a => a.id === 'aegis-main' ? { ...a, status: 'busy', lastActivity: 'Just now' } : a));
+    });
+    return unsubscribe;
+  }, []);
 
   const startAnalysisCycle = async () => {
     setIsRunning(true);
@@ -242,10 +261,10 @@ const AgentMonitor = () => {
         </div>
 
         {/* System Health */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+<div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
           <Zap className="h-3 w-3 text-accent" />
           <span>System Health: Optimal</span>
-          <span className="ml-auto">Midnight MCP: Connected</span>
+          <span className="ml-auto">Midnight MCP: Connected • Live Events</span>
         </div>
       </CardContent>
     </Card>

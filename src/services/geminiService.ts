@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { emitAgentEvent } from './agentBus';
 
 const API_KEY = 'AIzaSyBlPa5qn6-aMTgo__2YDd3sV9J3tGyjlKI';
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -25,8 +26,8 @@ export class AegisFinancialAgent {
   private model: GenerativeModel;
 
   constructor() {
-    this.model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-pro',
+    this.model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-pro-latest',
       generationConfig: {
         temperature: 0.3,
         topK: 32,
@@ -51,15 +52,18 @@ export class AegisFinancialAgent {
     const prompt = this.buildFinancialAnalysisPrompt(treasuryState, marketData, riskPolicy);
     
     try {
+      emitAgentEvent({ type: 'rebalance_start', message: 'Generating rebalancing proposal', timestamp: Date.now(), data: { treasuryState, marketData, riskPolicy } });
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
       
       // Parse the structured JSON response
       const parsedResponse = this.parseAIResponse(text);
+      emitAgentEvent({ type: 'rebalance_complete', message: 'Rebalancing proposal generated', timestamp: Date.now(), data: parsedResponse });
       return parsedResponse;
     } catch (error) {
       console.error('Gemini API error:', error);
+      emitAgentEvent({ type: 'rebalance_error', message: 'Gemini API error during proposal generation', timestamp: Date.now(), data: String(error) });
       return this.getDefaultProposal();
     }
   }
@@ -96,13 +100,16 @@ export class AegisFinancialAgent {
     `;
 
     try {
+      emitAgentEvent({ type: 'analyze_trade_start', message: 'Analyzing hypothetical trade', timestamp: Date.now(), data: { currentPortfolio, tradeQuery, riskPolicy } });
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-      
-      return this.parseTradeAnalysis(text);
+      const parsed = this.parseTradeAnalysis(text);
+      emitAgentEvent({ type: 'analyze_trade_result', message: `Trade analysis: ${parsed.recommendation}`, timestamp: Date.now(), data: parsed });
+      return parsed;
     } catch (error) {
       console.error('Trade analysis error:', error);
+      emitAgentEvent({ type: 'analyze_trade_error', message: 'Gemini API error during trade analysis', timestamp: Date.now(), data: String(error) });
       return {
         recommendation: 'Not Recommended',
         justification: 'Unable to analyze trade due to API error. Defaulting to conservative approach.',
@@ -184,6 +191,47 @@ export class AegisFinancialAgent {
     };
   }
 
+  async interpretRiskPolicy(policyText: string): Promise<RiskPolicy> {
+    const prompt = `
+      You are Aegis, a DAO treasury risk policy interpreter. Convert the following natural language policy into strict JSON with these exact fields and types:
+      {
+        "maxDrawdown": number (0-100),
+        "volatilityTarget": "Low|Medium|High",
+        "stablecoinAllocation": number (0-100),
+        "preferredAssetClass": string
+      }
+
+      Policy: "${policyText}"
+    `;
+    try {
+      emitAgentEvent({ type: 'policy_interpret_start', message: 'Interpreting risk policy', timestamp: Date.now(), data: { policyText } });
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const normalized: RiskPolicy = {
+          maxDrawdown: Number(parsed.maxDrawdown) || 10,
+          volatilityTarget: String(parsed.volatilityTarget || 'Low'),
+          stablecoinAllocation: Number(parsed.stablecoinAllocation) || 60,
+          preferredAssetClass: String(parsed.preferredAssetClass || 'Stablecoins')
+        };
+        emitAgentEvent({ type: 'policy_interpret_complete', message: 'Risk policy interpreted', timestamp: Date.now(), data: normalized });
+        return normalized;
+      }
+    } catch (error) {
+      console.error('Risk policy interpretation error:', error);
+      emitAgentEvent({ type: 'policy_interpret_error', message: 'Gemini API error during policy interpretation', timestamp: Date.now(), data: String(error) });
+    }
+    return {
+      maxDrawdown: 10,
+      volatilityTarget: 'Low',
+      stablecoinAllocation: 60,
+      preferredAssetClass: 'Stablecoins'
+    };
+  }
+  
   private getDefaultProposal() {
     return {
       action: 'hold',
