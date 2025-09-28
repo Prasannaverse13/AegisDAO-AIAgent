@@ -1,8 +1,7 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { emitAgentEvent } from './agentBus';
 
-const API_KEY = 'AIzaSyBlPa5qn6-aMTgo__2YDd3sV9J3tGyjlKI';
-const genAI = new GoogleGenerativeAI(API_KEY);
+const API_KEY = 'AIzaSyDWCgAHBZJFyyLJLMDkbxafv9ssJ4hfu2E';
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 interface MarketData {
   prices: Record<string, number>;
@@ -23,18 +22,38 @@ interface TreasuryState {
 }
 
 export class AegisFinancialAgent {
-  private model: GenerativeModel;
-
-  constructor() {
-    this.model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-pro-latest',
-      generationConfig: {
-        temperature: 0.3,
-        topK: 32,
-        topP: 0.95,
-        maxOutputTokens: 1024,
-      }
+  private async callGeminiAPI(prompt: string): Promise<string> {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.3,
+          topK: 32,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
+      })
     });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
   }
 
   async generateRebalancingProposal(
@@ -53,9 +72,7 @@ export class AegisFinancialAgent {
     
     try {
       emitAgentEvent({ type: 'rebalance_start', message: 'Generating rebalancing proposal', timestamp: Date.now(), data: { treasuryState, marketData, riskPolicy } });
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await this.callGeminiAPI(prompt);
       
       // Parse the structured JSON response
       const parsedResponse = this.parseAIResponse(text);
@@ -101,9 +118,7 @@ export class AegisFinancialAgent {
 
     try {
       emitAgentEvent({ type: 'analyze_trade_start', message: 'Analyzing hypothetical trade', timestamp: Date.now(), data: { currentPortfolio, tradeQuery, riskPolicy } });
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await this.callGeminiAPI(prompt);
       const parsed = this.parseTradeAnalysis(text);
       emitAgentEvent({ type: 'analyze_trade_result', message: `Trade analysis: ${parsed.recommendation}`, timestamp: Date.now(), data: parsed });
       return parsed;
@@ -205,9 +220,7 @@ export class AegisFinancialAgent {
     `;
     try {
       emitAgentEvent({ type: 'policy_interpret_start', message: 'Interpreting risk policy', timestamp: Date.now(), data: { policyText } });
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = await this.callGeminiAPI(prompt);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
