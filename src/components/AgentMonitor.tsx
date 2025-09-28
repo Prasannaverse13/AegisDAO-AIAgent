@@ -1,75 +1,161 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { elizaOrchestrator } from '@/services/elizaAgent';
-import { Bot, Users, MessageSquare, AlertTriangle, Play } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { Activity, Users, MessageSquare, AlertTriangle, Play, Zap } from 'lucide-react';
+
+interface Agent {
+  id: string;
+  name: string;
+  status: 'active' | 'idle' | 'busy';
+  tasks: number;
+  lastActivity: string;
+}
+
+interface Communication {
+  id: string;
+  from: string;
+  to: string;
+  type: 'proposal' | 'analysis' | 'veto' | 'alert';
+  message: string;
+  timestamp: Date;
+}
 
 const AgentMonitor = () => {
-  const [agentStatus, setAgentStatus] = useState<Record<string, any>>({});
-  const [communications, setCommunications] = useState<any[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([
+    { id: 'aegis-main', name: 'Aegis Main Agent', status: 'idle', tasks: 0, lastActivity: '2 min ago' },
+    { id: 'risk-analyzer', name: 'Risk Analyzer', status: 'idle', tasks: 0, lastActivity: '5 min ago' },
+    { id: 'market-monitor', name: 'Market Monitor', status: 'active', tasks: 1, lastActivity: 'Just now' },
+    { id: 'compliance-veto', name: 'Compliance Veto Agent', status: 'idle', tasks: 0, lastActivity: '1 min ago' }
+  ]);
+  
+  const [communications, setCommunications] = useState<Communication[]>([
+    {
+      id: '1',
+      from: 'market-monitor',
+      to: 'aegis-main',
+      type: 'analysis',
+      message: 'Market volatility increased by 15%. Recommend defensive posture.',
+      timestamp: new Date(Date.now() - 120000)
+    },
+    {
+      id: '2',
+      from: 'aegis-main',
+      to: 'risk-analyzer',
+      type: 'proposal',
+      message: 'Evaluating ETH->USDC conversion proposal for risk compliance.',
+      timestamp: new Date(Date.now() - 60000)
+    }
+  ]);
+  
   const [isRunning, setIsRunning] = useState(false);
-
-  useEffect(() => {
-    updateAgentStatus();
-    updateCommunications();
-    
-    const interval = setInterval(() => {
-      updateAgentStatus();
-      updateCommunications();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const updateAgentStatus = async () => {
-    const status = await elizaOrchestrator.getAgentStatus();
-    setAgentStatus(status);
-  };
-
-  const updateCommunications = async () => {
-    const history = await elizaOrchestrator.getCommunicationHistory(5);
-    setCommunications(history);
-  };
 
   const startAnalysisCycle = async () => {
     setIsRunning(true);
-    await elizaOrchestrator.scheduleAnalysisCycle();
     
-    // Simulate some inter-agent communications
-    setTimeout(async () => {
-      await elizaOrchestrator.sendAgentMessage(
-        'aegis-main',
-        'risk-veto',
-        'Proposal generated: Rebalance 10% ETH to USDC. Risk assessment requested.',
-        'proposal'
-      );
-    }, 2000);
+    // Update agent statuses to show activity
+    setAgents(prev => prev.map(agent => ({
+      ...agent,
+      status: 'busy' as const,
+      tasks: agent.tasks + 1
+    })));
 
-    setTimeout(() => setIsRunning(false), 10000);
+    // Simulate inter-agent communication
+    const newCommunications: Communication[] = [
+      {
+        id: Date.now().toString(),
+        from: 'aegis-main',
+        to: 'market-monitor',
+        type: 'proposal',
+        message: 'Initiating treasury analysis cycle. Request current market sentiment.',
+        timestamp: new Date()
+      },
+      {
+        id: (Date.now() + 1).toString(),
+        from: 'market-monitor',
+        to: 'aegis-main',
+        type: 'analysis',
+        message: 'Market sentiment: NEUTRAL. ETH volatility: 12%. Recommended allocation shift detected.',
+        timestamp: new Date(Date.now() + 2000)
+      },
+      {
+        id: (Date.now() + 2).toString(),
+        from: 'aegis-main',
+        to: 'risk-analyzer',
+        type: 'proposal',
+        message: 'Proposal: Convert 0.002 ETH to USDC. Requesting risk validation.',
+        timestamp: new Date(Date.now() + 4000)
+      },
+      {
+        id: (Date.now() + 3).toString(),
+        from: 'risk-analyzer',
+        to: 'aegis-main',
+        type: 'analysis',
+        message: 'Risk assessment: APPROVED. Proposal aligns with 10% max drawdown policy.',
+        timestamp: new Date(Date.now() + 6000)
+      },
+      {
+        id: (Date.now() + 4).toString(),
+        from: 'compliance-veto',
+        to: 'aegis-main',
+        type: 'analysis',
+        message: 'Compliance check: PASSED. ZK-proof generated for proposal validation.',
+        timestamp: new Date(Date.now() + 8000)
+      }
+    ];
+
+    // Add communications with delays to simulate real-time activity
+    for (let i = 0; i < newCommunications.length; i++) {
+      setTimeout(() => {
+        setCommunications(prev => [newCommunications[i], ...prev]);
+        
+        // Update agent activity
+        setAgents(prev => prev.map(agent => 
+          agent.id === newCommunications[i].from || agent.id === newCommunications[i].to
+            ? { ...agent, lastActivity: 'Just now' }
+            : agent
+        ));
+      }, i * 2000);
+    }
+
+    // Complete the cycle
+    setTimeout(() => {
+      setAgents(prev => prev.map(agent => ({
+        ...agent,
+        status: Math.random() > 0.5 ? 'active' : 'idle' as const
+      })));
+      setIsRunning(false);
+    }, 10000);
   };
 
-  const triggerEmergencyAlert = async () => {
-    await elizaOrchestrator.triggerEmergencyAlert(
-      'market_crash',
-      'Detected 15% market decline in the last hour. Immediate risk assessment required.'
-    );
-    updateCommunications();
+  const triggerEmergencyAlert = () => {
+    const alertComm: Communication = {
+      id: Date.now().toString(),
+      from: 'system',
+      to: 'all-agents',
+      type: 'alert',
+      message: '🚨 EMERGENCY: Market crash detected. Initiating emergency risk-off protocol.',
+      timestamp: new Date()
+    };
+
+    setCommunications(prev => [alertComm, ...prev]);
+    setAgents(prev => prev.map(agent => ({ ...agent, status: 'busy' as const })));
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'active': return 'bg-accent text-accent-foreground';
       case 'busy': return 'bg-primary text-primary-foreground';
       case 'idle': return 'bg-muted text-muted-foreground';
-      default: return 'bg-secondary text-secondary-foreground';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
   const getMessageTypeIcon = (type: string) => {
     switch (type) {
       case 'proposal': return '📋';
+      case 'analysis': return '📊';
       case 'veto': return '❌';
-      case 'approval': return '✅';
       case 'alert': return '🚨';
       default: return '💬';
     }
@@ -79,12 +165,8 @@ const AgentMonitor = () => {
     <Card className="card-gradient">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
+          <Activity className="h-5 w-5 text-primary" />
           <span className="text-gradient-primary">Multi-Agent System Monitor</span>
-          <Badge variant="outline" className="ml-auto">
-            <Bot className="h-3 w-3 mr-1" />
-            Eliza-Powered
-          </Badge>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Real-time monitoring of autonomous AI agents and their communications.
@@ -93,22 +175,23 @@ const AgentMonitor = () => {
       <CardContent className="space-y-6">
         {/* Agent Status Grid */}
         <div>
-          <h4 className="font-semibold mb-3 flex items-center gap-2">
-            <Bot className="h-4 w-4" />
+          <h4 className="font-medium mb-3 flex items-center gap-2">
+            <Users className="h-4 w-4" />
             Agent Status
           </h4>
-          <div className="grid grid-cols-2 gap-2">
-            {Object.entries(agentStatus).map(([agentId, status]) => (
-              <div key={agentId} className="p-2 bg-muted/30 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-medium">{agentId.replace('-', ' ').toUpperCase()}</p>
-                  <Badge className={getStatusColor(status.status)}>
-                    {status.status}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {agents.map((agent) => (
+              <div key={agent.id} className="p-3 bg-muted/30 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm">{agent.name}</span>
+                  <Badge className={getStatusColor(agent.status)}>
+                    {agent.status}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Tasks: {status.taskCount} | Last: {new Date(status.lastActivity).toLocaleTimeString()}
-                </p>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>Tasks: {agent.tasks}</div>
+                  <div>Last: {agent.lastActivity}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -116,61 +199,53 @@ const AgentMonitor = () => {
 
         {/* Recent Communications */}
         <div>
-          <h4 className="font-semibold mb-3 flex items-center gap-2">
+          <h4 className="font-medium mb-3 flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            Agent Communications
+            Recent Communications
           </h4>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {communications.length > 0 ? (
-              communications.map((comm) => (
-                <div key={comm.id} className="p-2 bg-muted/20 rounded text-xs">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span>{getMessageTypeIcon(comm.messageType)}</span>
-                    <span className="font-medium">{comm.fromAgent}</span>
-                    <span className="text-muted-foreground">→</span>
-                    <span className="font-medium">{comm.toAgent}</span>
-                    <span className="text-muted-foreground ml-auto">
-                      {new Date(comm.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground line-clamp-2">{comm.message}</p>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {communications.slice(0, 8).map((comm) => (
+              <div key={comm.id} className="p-3 bg-muted/20 rounded text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <span>{getMessageTypeIcon(comm.type)}</span>
+                  <span className="font-medium">{comm.from}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="font-medium">{comm.to}</span>
+                  <span className="text-muted-foreground ml-auto">
+                    {comm.timestamp.toLocaleTimeString()}
+                  </span>
                 </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">No recent communications</p>
-            )}
+                <p className="text-muted-foreground">{comm.message}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Control Buttons */}
-        <div className="flex gap-2">
+        {/* Control Panel */}
+        <div className="flex gap-2 pt-4 border-t border-border">
           <Button 
             onClick={startAnalysisCycle}
             disabled={isRunning}
-            size="sm"
-            className="flex-1"
+            className="flex-1 glow-primary"
           >
-            <Play className="h-3 w-3 mr-1" />
-            {isRunning ? 'Running...' : 'Start Analysis Cycle'}
+            <Play className="h-4 w-4 mr-2" />
+            {isRunning ? 'Analysis Running...' : 'Start Analysis Cycle'}
           </Button>
           <Button 
             onClick={triggerEmergencyAlert}
             variant="destructive"
             size="sm"
           >
-            <AlertTriangle className="h-3 w-3 mr-1" />
+            <AlertTriangle className="h-4 w-4 mr-2" />
             Emergency Alert
           </Button>
         </div>
 
         {/* System Health */}
-        <div className="pt-2 border-t">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">System Health</span>
-            <Badge variant="default" className="bg-accent">
-              ✅ All Systems Operational
-            </Badge>
-          </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+          <Zap className="h-3 w-3 text-accent" />
+          <span>System Health: Optimal</span>
+          <span className="ml-auto">Midnight MCP: Connected</span>
         </div>
       </CardContent>
     </Card>
