@@ -451,15 +451,4 @@ This project is provided for **educational and demonstration purposes**. It show
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions to AegisDAO! Please see our development guidelines above and feel free to:
-
-- Report bugs and issues
-- Suggest new features and enhancements  
-- Submit pull requests with improvements
-- Participate in architectural discussions
-
----
-
 **Built with ❤️ using cutting-edge AI, privacy technology, and decentralized systems.**
