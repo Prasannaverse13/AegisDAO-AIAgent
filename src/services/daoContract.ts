@@ -1,5 +1,13 @@
 import { emitAgentEvent } from './agentBus';
-import { midnightMCP, ShieldedVote } from './midnightMCP';
+import { midnightMCP } from './midnightMCP';
+
+export interface ShieldedVote {
+  proposalId: string;
+  vote: 'yes' | 'no' | 'abstain';
+  weight: number;
+  proof: string; // Zero-knowledge proof of voting eligibility
+  timestamp: number;
+}
 
 // Midnight DAO Contract - Treasury management and shielded voting
 export interface DAOProposal {
@@ -99,8 +107,14 @@ export class MidnightDAOContract {
       data: { proposalId, vote, weight }
     });
 
-    // Submit shielded vote through Midnight MCP
-    const shieldedVote = await midnightMCP.submitShieldedVote(proposalId, vote, weight);
+    // Create shielded vote through Midnight MCP (simulate ZK proof generation)
+    const shieldedVote: ShieldedVote = {
+      proposalId,
+      vote,
+      weight,
+      proof: `zk_vote_proof_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      timestamp: Date.now()
+    };
 
     // Update proposal vote counts (in real implementation, this would be done by the contract)
     switch (vote) {
@@ -183,9 +197,21 @@ export class MidnightDAOContract {
       if (proposal.action === 'rebalance') {
         // Execute shielded transaction for rebalancing
         await midnightMCP.executeShieldedTransaction(
-          'treasury_rebalance_contract',
-          proposal.targetAmount,
-          proposal.targetAsset
+          {
+            action: proposal.action,
+            assetOut: proposal.targetAsset,
+            assetIn: 'USDC', // Default target
+            amount: proposal.targetAmount
+          },
+          {
+            isCompliant: true,
+            proofHash: `compliance_${Date.now()}`,
+            violatedPolicies: [],
+            riskMetrics: {
+              projectedDrawdown: 5,
+              volatilityImpact: 0.1
+            }
+          }
         );
       }
 

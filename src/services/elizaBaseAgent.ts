@@ -390,7 +390,7 @@ export class ElizaBaseAgent {
     );
   }
 
-  private async initializeTasks(): Promise<void> {
+  protected async initializeTasks(): Promise<void> {
     // Initialize type-specific tasks - override in subclasses
   }
 

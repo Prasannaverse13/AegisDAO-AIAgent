@@ -3,47 +3,50 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Activity, Users, MessageSquare, AlertTriangle, Play, Zap } from 'lucide-react';
-import { subscribeAgentEvents } from '@/services/agentBus';
+import { elizaFinancialAgent } from '../services/elizaBaseAgent';
+import { agentCommunication } from '../services/agentCommunication';
+import { subscribeAgentEvents, type AgentEvent } from '../services/agentBus';
 
 interface Agent {
   id: string;
   name: string;
   status: 'active' | 'idle' | 'busy';
-  tasks: number;
-  lastActivity: string;
+  taskCount: number;
+  lastActivity: Date;
 }
 
 interface Communication {
   id: string;
-  from: string;
-  to: string;
-  type: 'proposal' | 'analysis' | 'veto' | 'alert';
+  sender: string;
+  receiver: string;
+  type: 'request' | 'response' | 'notification' | 'alert' | 'analysis';
   message: string;
   timestamp: Date;
 }
 
 const AgentMonitor = () => {
   const [agents, setAgents] = useState<Agent[]>([
-    { id: 'aegis-main', name: 'Aegis Main Agent', status: 'idle', tasks: 0, lastActivity: '2 min ago' },
-    { id: 'risk-analyzer', name: 'Risk Analyzer', status: 'idle', tasks: 0, lastActivity: '5 min ago' },
-    { id: 'market-monitor', name: 'Market Monitor', status: 'active', tasks: 1, lastActivity: 'Just now' },
-    { id: 'compliance-veto', name: 'Compliance Veto Agent', status: 'idle', tasks: 0, lastActivity: '1 min ago' }
+    { id: 'aegis_financial_analyst', name: 'Aegis Financial Analyst', status: 'idle', taskCount: 0, lastActivity: new Date() },
+    { id: 'sentinel_risk_manager', name: 'Sentinel Risk Manager', status: 'idle', taskCount: 0, lastActivity: new Date() },
+    { id: 'oracle_market_monitor', name: 'Oracle Market Monitor', status: 'active', taskCount: 1, lastActivity: new Date() },
+    { id: 'nexus_execution_engine', name: 'Nexus Execution Engine', status: 'idle', taskCount: 0, lastActivity: new Date() },
+    { id: 'guardian_compliance', name: 'Guardian Compliance Checker', status: 'idle', taskCount: 0, lastActivity: new Date() }
   ]);
   
   const [communications, setCommunications] = useState<Communication[]>([
     {
       id: '1',
-      from: 'market-monitor',
-      to: 'aegis-main',
+      sender: 'oracle_market_monitor',
+      receiver: 'aegis_financial_analyst',
       type: 'analysis',
       message: 'Market volatility increased by 15%. Recommend defensive posture.',
       timestamp: new Date(Date.now() - 120000)
     },
     {
       id: '2',
-      from: 'aegis-main',
-      to: 'risk-analyzer',
-      type: 'proposal',
+      sender: 'aegis_financial_analyst',
+      receiver: 'sentinel_risk_manager',
+      type: 'request',
       message: 'Evaluating ETH->USDC conversion proposal for risk compliance.',
       timestamp: new Date(Date.now() - 60000)
     }
@@ -52,19 +55,23 @@ const AgentMonitor = () => {
 const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeAgentEvents((evt) => {
+    const unsubscribe = subscribeAgentEvents((evt: AgentEvent) => {
       // Append live event as a communication line
       setCommunications(prev => [{
         id: `${evt.timestamp}`,
-        from: 'aegis-main',
-        to: evt.type.includes('policy') ? 'risk-analyzer' : evt.type.includes('rebalance') ? 'market-monitor' : 'system',
-        type: evt.type.includes('error') ? 'alert' : evt.type.includes('proposal') ? 'proposal' : 'analysis',
+        sender: 'aegis_financial_analyst',
+        receiver: evt.type.includes('policy') ? 'sentinel_risk_manager' : evt.type.includes('rebalance') ? 'oracle_market_monitor' : 'system',
+        type: evt.type.includes('error') ? 'alert' : evt.type.includes('proposal') ? 'request' : 'analysis',
         message: evt.message,
         timestamp: new Date(evt.timestamp)
-      }, ...prev]);
+      }, ...prev.slice(0, 19)]); // Keep last 20
 
-      // Poke agents to show activity
-      setAgents(prev => prev.map(a => a.id === 'aegis-main' ? { ...a, status: 'busy', lastActivity: 'Just now' } : a));
+      // Update agents to show activity
+      setAgents(prev => prev.map(a => 
+        a.id === 'aegis_financial_analyst' 
+          ? { ...a, status: 'busy' as const, lastActivity: new Date() } 
+          : a
+      ));
     });
     return unsubscribe;
   }, []);
@@ -76,48 +83,48 @@ const [isRunning, setIsRunning] = useState(false);
     setAgents(prev => prev.map(agent => ({
       ...agent,
       status: 'busy' as const,
-      tasks: agent.tasks + 1
+      taskCount: agent.taskCount + 1
     })));
 
     // Simulate inter-agent communication
     const newCommunications: Communication[] = [
       {
         id: Date.now().toString(),
-        from: 'aegis-main',
-        to: 'market-monitor',
-        type: 'proposal',
+        sender: 'aegis_financial_analyst',
+        receiver: 'oracle_market_monitor',
+        type: 'request',
         message: 'Initiating treasury analysis cycle. Request current market sentiment.',
         timestamp: new Date()
       },
       {
         id: (Date.now() + 1).toString(),
-        from: 'market-monitor',
-        to: 'aegis-main',
-        type: 'analysis',
+        sender: 'oracle_market_monitor',
+        receiver: 'aegis_financial_analyst',
+        type: 'response',
         message: 'Market sentiment: NEUTRAL. ETH volatility: 12%. Recommended allocation shift detected.',
         timestamp: new Date(Date.now() + 2000)
       },
       {
         id: (Date.now() + 2).toString(),
-        from: 'aegis-main',
-        to: 'risk-analyzer',
-        type: 'proposal',
+        sender: 'aegis_financial_analyst',
+        receiver: 'sentinel_risk_manager',
+        type: 'request',
         message: 'Proposal: Convert 0.002 ETH to USDC. Requesting risk validation.',
         timestamp: new Date(Date.now() + 4000)
       },
       {
         id: (Date.now() + 3).toString(),
-        from: 'risk-analyzer',
-        to: 'aegis-main',
-        type: 'analysis',
+        sender: 'sentinel_risk_manager',
+        receiver: 'aegis_financial_analyst',
+        type: 'response',
         message: 'Risk assessment: APPROVED. Proposal aligns with 10% max drawdown policy.',
         timestamp: new Date(Date.now() + 6000)
       },
       {
         id: (Date.now() + 4).toString(),
-        from: 'compliance-veto',
-        to: 'aegis-main',
-        type: 'analysis',
+        sender: 'guardian_compliance',
+        receiver: 'aegis_financial_analyst',
+        type: 'notification',
         message: 'Compliance check: PASSED. ZK-proof generated for proposal validation.',
         timestamp: new Date(Date.now() + 8000)
       }
@@ -130,8 +137,8 @@ const [isRunning, setIsRunning] = useState(false);
         
         // Update agent activity
         setAgents(prev => prev.map(agent => 
-          agent.id === newCommunications[i].from || agent.id === newCommunications[i].to
-            ? { ...agent, lastActivity: 'Just now' }
+          agent.id === newCommunications[i].sender || agent.id === newCommunications[i].receiver
+            ? { ...agent, lastActivity: new Date() }
             : agent
         ));
       }, i * 2000);
@@ -150,8 +157,8 @@ const [isRunning, setIsRunning] = useState(false);
   const triggerEmergencyAlert = () => {
     const alertComm: Communication = {
       id: Date.now().toString(),
-      from: 'system',
-      to: 'all-agents',
+      sender: 'system',
+      receiver: 'all-agents',
       type: 'alert',
       message: '🚨 EMERGENCY: Market crash detected. Initiating emergency risk-off protocol.',
       timestamp: new Date()
@@ -172,10 +179,11 @@ const [isRunning, setIsRunning] = useState(false);
 
   const getMessageTypeIcon = (type: string) => {
     switch (type) {
-      case 'proposal': return '📋';
-      case 'analysis': return '📊';
-      case 'veto': return '❌';
+      case 'request': return '📋';
+      case 'response': return '📊';
+      case 'notification': return '📢';
       case 'alert': return '🚨';
+      case 'analysis': return '📊';
       default: return '💬';
     }
   };
@@ -208,8 +216,8 @@ const [isRunning, setIsRunning] = useState(false);
                   </Badge>
                 </div>
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <div>Tasks: {agent.tasks}</div>
-                  <div>Last: {agent.lastActivity}</div>
+                  <div>Tasks: {agent.taskCount}</div>
+                  <div>Last: {agent.lastActivity.toLocaleTimeString()}</div>
                 </div>
               </div>
             ))}
@@ -227,9 +235,9 @@ const [isRunning, setIsRunning] = useState(false);
               <div key={comm.id} className="p-3 bg-muted/20 rounded text-xs">
                 <div className="flex items-center gap-2 mb-1">
                   <span>{getMessageTypeIcon(comm.type)}</span>
-                  <span className="font-medium">{comm.from}</span>
+                  <span className="font-medium">{comm.sender}</span>
                   <span className="text-muted-foreground">→</span>
-                  <span className="font-medium">{comm.to}</span>
+                  <span className="font-medium">{comm.receiver}</span>
                   <span className="text-muted-foreground ml-auto">
                     {comm.timestamp.toLocaleTimeString()}
                   </span>
