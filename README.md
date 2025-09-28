@@ -86,6 +86,18 @@ The system operates through a coordinated network of specialized AI agents, each
 
 ## 📁 File Structure & Resource Mapping
 
+### External Resources Integration
+
+This project integrates several key external resources from DEGA.org:
+
+| Resource | Repository | File Implementation | Purpose |
+|----------|------------|-------------------|---------|
+| **Midnight MCP** | [midnight-mcp](https://github.com/DEGAorg/midnight-mcp) | `src/services/midnightMCP.ts` | Core implementation of Midnight MCP module for wallet state management, secure private key handling, and shielded transaction execution on Midnight blockchain |
+| **Midnight DAO Contract** | [midnight-dao-contract](https://github.com/DEGAorg/midnight-dao-contract) | `src/services/daoContract.ts` | Example Compact smart contract for DAO treasury management and shielded voting functionality |
+| **Marketplace Registry Contract** | [marketplace-registry-contract](https://github.com/DEGAorg/marketplace-registry-contract) | `src/services/marketplaceRegistry.ts` | Smart contract template for managing decentralized registry of marketplaces, services and assets |
+| **Agent Communications MCP** | [agent-communication-mcp](https://github.com/DEGAorg/agent-communication-mcp) | `src/services/agentCommunication.ts` | MCP server implementation for secure agent-to-agent communication using encrypted message exchange |
+| **Eliza Base Agent** | [Eliza-Base-Agent](https://github.com/DEGAorg/Eliza-Base-Agent) | `src/services/elizaBaseAgent.ts`<br/>`src/services/elizaAgent.ts` | Foundation for building autonomous AI agents capable of blockchain interactions and service orchestration |
+
 ### Frontend Components
 
 | Component | File | Purpose | Resources Used |
